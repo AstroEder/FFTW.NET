@@ -16,7 +16,10 @@ namespace FFTW.NET
         where T : struct
     {
         readonly byte[] _buffer;
-        readonly PinnedGCHandle _pin;
+        // Not readonly: Dispose()/Free() mutate the handle's internal state; calling a
+        // non-readonly struct method through a readonly field would operate on a defensive
+        // copy, so the mutation (and thus IsDisposed) would not be observed.
+        PinnedGCHandle _pin;
         readonly int _alignment;
         readonly IntPtr _alignedPtr;
         readonly int _length;

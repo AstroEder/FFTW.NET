@@ -12,6 +12,7 @@ License: Microsoft Reciprocal License (MS-RL)
 <# // ------------------------------------------------------ Code Start ------------------------------------------------------
 const string DllName32 = "libfftw3-3-x86";
 const string DllName64 = "libfftw3-3-x64";
+const string NativeLibraryName = "fftw3";
 const string CallingConvention = "CallingConvention.Cdecl";
 
 string[] Imports = {
@@ -86,6 +87,7 @@ foreach (string import in Imports)
 
 		#region <#=name#>
 
+#if NETSTANDARD2_0
 		[DllImport("<#=DllName32#>", CallingConvention = <#=CallingConvention#>, EntryPoint = "<#=name#>")]<#=attributes#>
 		static extern <#=returnType#> <#=name#>_x86<#=argumentList#>;
 
@@ -119,6 +121,13 @@ foreach (string import in Imports)
 	}
 // --------------------------------------------------------- Code End ----------------------------------------------------- #>
 		}
+#else
+		// The actual native library file is resolved at runtime for the current OS/architecture
+		// by FftwInterop.ResolveNativeLibrary (registered via NativeLibrary.SetDllImportResolver),
+		// so a single p/invoke declaration works on Windows, Linux and macOS alike.
+		[DllImport(NativeLibraryName, CallingConvention = <#=CallingConvention#>, EntryPoint = "<#=name#>")]<#=attributes#>
+		public static extern <#=returnType#> <#=name#><#=argumentList#>;
+#endif
 
 		#endregion
 <# // ------------------------------------------------------ Code Start ------------------------------------------------------

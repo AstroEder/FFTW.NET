@@ -3,12 +3,37 @@ C#/.NET wrapper for FFTW (http://www.fftw.org/)
 
 ## Installation
 Install NuGet package: https://www.nuget.org/packages/FFTW.NET
-or
+
+You also need the native FFTW library itself, which is not included in the package:
+
+### Windows
 Download the FFTW binaries ("libfftw3-3.dll") from http://www.fftw.org/download.html,
 rename them to "libfftw3-3-x86.dll" and "libfftw3-3-x64.dll" and put them in your application directory.
 FFTW.NET will automatically load the right one.
-This is currently only tested for Windows, but it also should work on other platforms using Mono.
-(Of course you would need the appropriate platform specific FFTW binaries.)
+
+### Linux
+Install the FFTW shared library via your distribution's package manager, e.g. on
+Debian/Ubuntu:
+```bash
+sudo apt install libfftw3-double3
+```
+(older Debian/Ubuntu releases name this package "libfftw3-3" instead).
+FFTW.NET will automatically find and load it (looked up as "libfftw3.so.3"/"libfftw3.so").
+
+Note: multi-threaded planning (`nThreads` > 1) additionally requires the FFTW threading
+functions to be available. On Linux these usually live in a separate package/library
+(e.g. one providing "libfftw3_threads.so"/"libfftw3_omp.so"); without it, FFTW.NET
+still works, just single-threaded.
+
+### macOS
+Install FFTW, e.g. via Homebrew:
+```bash
+brew install fftw
+```
+FFTW.NET will automatically find and load it (looked up as "libfftw3.3.dylib"/"libfftw3.dylib").
+
+`FftwInterop.IsAvailable` reports whether a native library could be found, and can be
+checked before using any of the other classes.
 
 ## Help
 See TestApp/Program.cs for examples on how to use it.

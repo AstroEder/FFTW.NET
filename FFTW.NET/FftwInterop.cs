@@ -17,7 +17,12 @@ GNU General Public License for more details.
 #endregion
 
 using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Text;
+#if !NETSTANDARD2_0
+using System.Reflection;
+#endif
 
 namespace FFTW.NET
 {
@@ -81,11 +86,26 @@ namespace FFTW.NET
 
     public static partial class FftwInterop
     {
+#if !NETSTANDARD2_0
+        // Logical library name used by the p/invoke declarations in FftwInterop.g.cs.
+        // The actual file is resolved for the current OS/architecture by ResolveNativeLibrary.
+        internal const string NativeLibraryName = "fftw3";
+#endif
+
         static readonly Version _version = GetVersionAndInitialize();
 
         public static Version Version => _version;
 
         public static bool IsAvailable => _version != null;
+
+        /// <summary>
+        /// Whether the loaded native FFTW library exports the threading functions
+        /// (<see cref="fftw_init_threads"/>/<see cref="fftw_plan_with_nthreads"/>).
+        /// On Linux these typically live in a separate shared library
+        /// (e.g. "libfftw3_threads.so"/"libfftw3_omp.so") which is not loaded by this class,
+        /// unlike the official Windows binaries which bundle them into the main DLL.
+        /// </summary>
+        internal static bool IsThreadingAvailable { get; private set; }
 
         internal static object Lock
         {
@@ -101,12 +121,77 @@ namespace FFTW.NET
 
         static Version GetVersionAndInitialize()
         {
-            try { fftw_init_threads(); }
+#if !NETSTANDARD2_0
+            NativeLibrary.SetDllImportResolver(typeof(FftwInterop).Assembly, ResolveNativeLibrary);
+#endif
+
+            string version;
+            try { version = GetVersion(); }
             catch (DllNotFoundException) { return null; }
 
-            string version = GetVersion();
+            // On Linux, threading support ("fftw_init_threads") typically lives in a separate
+            // shared library (e.g. "libfftw3_threads.so"/"libfftw3_omp.so") that is not loaded
+            // by default, unlike the official Windows binaries which bundle it into the main DLL.
+            // Its absence does not mean FFTW itself is unavailable, only that
+            // FftwInterop.fftw_plan_with_nthreads cannot be used.
+            try
+            {
+                fftw_init_threads();
+                IsThreadingAvailable = true;
+            }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
+
             return new Version(version);
         }
+
+#if !NETSTANDARD2_0
+        /// <summary>
+        /// Maps the logical <see cref="NativeLibraryName"/> to the actual FFTW shared library
+        /// for the current OS, trying the conventional names in turn. This allows a single
+        /// p/invoke declaration to work across Windows, Linux and macOS (including on architectures
+        /// other than x86/x64, e.g. ARM64), instead of hard-coding Windows-style DLL names.
+        /// </summary>
+        static IntPtr ResolveNativeLibrary(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+        {
+            if (libraryName != NativeLibraryName)
+                return IntPtr.Zero;
+
+            foreach (string candidate in GetCandidateNativeLibraryNames())
+            {
+                if (NativeLibrary.TryLoad(candidate, assembly, searchPath, out IntPtr handle))
+                    return handle;
+            }
+
+            return IntPtr.Zero;
+        }
+
+        static IEnumerable<string> GetCandidateNativeLibraryNames()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Historically, this library expected the caller to supply the official FFTW
+                // Windows binaries renamed to disambiguate the two bitnesses, since both can
+                // otherwise not be shipped side by side in the same output directory.
+                yield return RuntimeInformation.ProcessArchitecture == Architecture.X86
+                    ? "libfftw3-3-x86.dll"
+                    : "libfftw3-3-x64.dll";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                // Names used by the "libfftw3-3"/"libfftw3-double3" distro packages
+                // (e.g. `apt install libfftw3-3`) and by "libfftw3-dev".
+                yield return "libfftw3.so.3";
+                yield return "libfftw3.so";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                // Name used e.g. by the Homebrew "fftw" formula.
+                yield return "libfftw3.3.dylib";
+                yield return "libfftw3.dylib";
+            }
+        }
+#endif
 
         public static string fftw_export_wisdom_to_string()
         {

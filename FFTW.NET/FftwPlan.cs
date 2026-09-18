@@ -58,7 +58,13 @@ namespace FFTW.NET
 
             lock (FftwInterop.Lock)
             {
-                FftwInterop.fftw_plan_with_nthreads(nThreads);
+                if (FftwInterop.IsThreadingAvailable)
+                    FftwInterop.fftw_plan_with_nthreads(nThreads);
+                else if (nThreads > 1)
+                    throw new PlatformNotSupportedException($"Multi-threaded planning was requested ({nameof(nThreads)} = {nThreads}), but the loaded FFTW native library does not export the threading functions. " +
+                        "On Linux, install a package that provides them (e.g. the one shipping \"libfftw3_threads\"/\"libfftw3_omp\") " +
+                        $"or use {nameof(nThreads)} = 1.");
+
                 _plan = GetPlan(rank, n, _buffer1.Pointer, _buffer2.Pointer, direction, plannerFlags);
             }
         }
